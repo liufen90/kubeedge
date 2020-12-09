@@ -1,0 +1,15 @@
+apiVersion: rules.kubeedge.io/v1
+kind: Rule
+metadata:
+  name: my-rule
+  labels:
+    description: test
+spec:
+  source: "rest"
+  sourceResource: {"path":"/a"}
+  target: "eventbus"
+  targetResource: {"topic":"/x"}
+status:
+  successMessages: 0
+  failMessages: 0
+  errors: []

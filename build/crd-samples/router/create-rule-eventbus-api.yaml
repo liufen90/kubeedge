@@ -1,0 +1,15 @@
+apiVersion: rules.kubeedge.io/v1
+kind: Rule
+metadata:
+  name: my-rule-eventbus-api
+  labels:
+    description: test
+spec:
+  source: "eventbus"
+  sourceResource: {"topic":"/x","node_name":"xxx"}
+  target: "api"
+  targetResource: {"resource":"http://a.com"}
+status:
+  successMessages: 0
+  failMessages: 0
+  errors: []

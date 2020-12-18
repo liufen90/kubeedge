@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	routerv1 "github.com/kubeedge/kubeedge/cloud/pkg/apis/rules/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -40,6 +41,10 @@ type DownstreamController struct {
 	serviceManager *manager.ServiceManager
 
 	endpointsManager *manager.EndpointsManager
+
+	rulesManager *manager.RuleManager
+
+	ruleEndpointsManager *manager.RuleEndpointManager
 
 	lc *manager.LocationCache
 }
@@ -445,6 +450,88 @@ func (dc *DownstreamController) syncEndpoints() {
 	}
 }
 
+func (dc *DownstreamController) syncRule() {
+	for {
+		select {
+		case <-beehiveContext.Done():
+			klog.Warning("Stop edgecontroller downstream syncRule loop")
+			return
+		case e := <-dc.rulesManager.Events():
+			klog.Infof("Get rule events: event type: %s.", e.Type)
+			rule, ok := e.Object.(*routerv1.Rule)
+			if !ok {
+				klog.Warningf("object type: %T unsupported", rule)
+				continue
+			}
+			klog.Infof("Get rule events: rule object: %+v.", rule)
+			msg := model.NewMessage("")
+			msg.SetResourceVersion(rule.ResourceVersion)
+			resource, err := messagelayer.BuildResourceForRouter(model.ResourceTypeRule, rule.Name)
+			if err != nil {
+				klog.Warningf("built message resource failed with error: %s", err)
+				continue
+			}
+			msg.Content = rule
+			switch e.Type {
+			case watch.Added:
+				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.InsertOperation)
+			case watch.Deleted:
+				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.DeleteOperation)
+			case watch.Modified:
+				klog.Warningf("rule event type: %s unsupported", e.Type)
+			default:
+				klog.Warningf("rule event type: %s unsupported", e.Type)
+			}
+			if err := dc.messageLayer.Send(*msg); err != nil {
+				klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())
+			} else {
+				klog.V(4).Infof("send message successfully, operation: %s, resource: %s", msg.GetOperation(), msg.GetResource())
+			}
+		}
+	}
+}
+
+func (dc *DownstreamController) syncRuleEndpoint() {
+	for {
+		select {
+		case <-beehiveContext.Done():
+			klog.Warning("Stop edgecontroller downstream syncRuleEndpoint loop")
+			return
+		case e := <-dc.ruleEndpointsManager.Events():
+			klog.Infof("Get ruleEndpoint events: event type: %s.", e.Type)
+			ruleEndpoint, ok := e.Object.(*routerv1.RuleEndpoint)
+			if !ok {
+				klog.Warningf("object type: %T unsupported", ruleEndpoint)
+				continue
+			}
+			klog.Infof("Get ruleEndpoint events: ruleEndpoint object: %+v.", ruleEndpoint)
+			msg := model.NewMessage("")
+			msg.SetResourceVersion(ruleEndpoint.ResourceVersion)
+			resource, err := messagelayer.BuildResourceForRouter(model.ResourceTypeRuleEndpoint, ruleEndpoint.Name)
+			if err != nil {
+				klog.Warningf("built message resource failed with error: %s", err)
+				continue
+			}
+			msg.Content = ruleEndpoint
+			switch e.Type {
+			case watch.Added:
+				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.InsertOperation)
+			case watch.Deleted:
+				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.DeleteOperation)
+			case watch.Modified:
+				klog.Warningf("ruleEndpoint event type: %s unsupported", e.Type)
+			default:
+				klog.Warningf("ruleEndpoint event type: %s unsupported", e.Type)
+			}
+			if err := dc.messageLayer.Send(*msg); err != nil {
+				klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())
+			} else {
+				klog.V(4).Infof("send message successfully, operation: %s, resource: %s", msg.GetOperation(), msg.GetResource())
+			}
+		}
+	}
+}
+
 // Start DownstreamController
 func (dc *DownstreamController) Start() error {
 	klog.Info("start downstream controller")
@@ -465,6 +552,12 @@ func (dc *DownstreamController) Start() error {
 
 	// endpoints
 	go dc.syncEndpoints()
+
+	// rule
+	go dc.syncRule()
+
+	// rule-endpoint
+	go dc.syncRuleEndpoint()
 
 	return nil
 }
@@ -565,16 +658,41 @@ func NewDownstreamController() (*DownstreamController, error) {
 		return nil, err
 	}
 
+	config, err := utils.KubeConfig()
+	if err != nil {
+		klog.Warningf("Get kubeConfig error: %v", err)
+		return nil, err
+	}
+	crdCli, err := utils.NewCRDClient(config)
+	if err != nil {
+		klog.Warningf("Failed to create crd client: %s", err)
+		return nil, err
+	}
+
+	rulesManager, err := manager.NewRuleManager(crdCli, v1.NamespaceAll)
+	if err != nil {
+		klog.Warningf("Create rulesManager failed with error: %s", err)
+		return nil, err
+	}
+
+	ruleEndpointsManager, err := manager.NewRuleEndpointManager(crdCli, v1.NamespaceAll)
+	if err != nil {
+		klog.Warningf("Create ruleEndpointsManager failed with error: %s", err)
+		return nil, err
+	}
+
 	dc := &DownstreamController{
-		kubeClient:       cli,
-		podManager:       podManager,
-		configmapManager: configMapManager,
-		secretManager:    secretManager,
-		nodeManager:      nodesManager,
-		serviceManager:   serviceManager,
-		endpointsManager: endpointsManager,
-		messageLayer:     messagelayer.NewContextMessageLayer(),
-		lc:               lc,
+		kubeClient:           cli,
+		podManager:           podManager,
+		configmapManager:     configMapManager,
+		secretManager:        secretManager,
+		nodeManager:          nodesManager,
+		serviceManager:       serviceManager,
+		endpointsManager:     endpointsManager,
+		messageLayer:         messagelayer.NewContextMessageLayer(),
+		rulesManager:         rulesManager,
+		ruleEndpointsManager: ruleEndpointsManager,
+		lc:                   lc,
 	}
 	if err := dc.initLocating(); err != nil {
 		return nil, err

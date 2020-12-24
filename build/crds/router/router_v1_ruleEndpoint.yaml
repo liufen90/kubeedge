@@ -26,7 +26,7 @@ spec:
                     type: string
               required:
                 - ruleEndpointType
-  scope: Cluster
+  scope: Namespaced
   names:
     plural: rule-endpoints
     singular: rule-endpoint

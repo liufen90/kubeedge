@@ -57,7 +57,7 @@ spec:
                 - successMessages
                 - failMessages
                 - errors
-  scope: Cluster
+  scope: Namespaced
   names:
     plural: rules
     singular: rule

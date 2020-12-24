@@ -95,7 +95,7 @@ spec:
                     type: string
               required:
                 - ruleEndpointType
-  scope: Cluster
+  scope: Namespaced
   names:
     plural: rule-endpoints
     singular: rule-endpoint
@@ -166,7 +166,7 @@ spec:
                 - successMessages
                 - failMessages
                 - errors
-  scope: Cluster
+  scope: Namespaced
   names:
     plural: rules
     singular: rule
@@ -241,12 +241,12 @@ status:
 The rest api in the cloud can be called to send messages to eventbus on an edge node based on the node name and sourceResource. 
 
 - Method: POST
-- URL: **http://{rest_endpoint}/{node_name}/{path}**, {rest_endpoint} is router's endpoint, {node_name} is name of edgenode, {path} is source ruleEndpoint's sourceResource.  
+- URL: **http://{rest_endpoint}/{node_name}/{namespace}/{path}**, {rest_endpoint} is router's endpoint, {node_name} is name of edgenode, {namespace} is the namespace of rule,{path} is source ruleEndpoint's sourceResource.
 - Body: {user_message}, {user_message} is user's message
 
 For example:
 - Method: POST
-- URL: http://{rest_endpoint}/{node_name}/a
+- URL: http://{rest_endpoint}/{node_name}/default/a
 - Body： {"message":"123"}
 
 1.4 User's app subscribes custom topics from mqtt-broker in edge to receive messages from the cloud. 
@@ -317,13 +317,13 @@ status:
 ```
 
 2.3 User's app in edge publishes messages with custom topic to MQTT broker on edge node. 
-- Topic: {custom_topic}
+- Topic: {namespace}/{custom_topic}
 - Message:  {user_api_body}
 
 for example:
 - publish data with mosquitto, exec command:
 
- `mosquitto_pub -t '/x' -d -m '{"edgemsg":"msgtocloud"}'`
+ `mosquitto_pub -t 'default//x' -d -m '{"edgemsg":"msgtocloud"}'`
 
 2.4 Kubeedge delivers messages to user api address in cloud. 
 
@@ -396,7 +396,7 @@ status:
 The rest api in the cloud can be called to send messages to servicebus on an edge node based on the node name and sourceResource. 
 
 - Method: POST/GET/DELETE/PUT
-- URL: **http://{rest_endpoint}/{node_name}/{path}**, {rest_endpoint} is router's endpoint, {node_name} is name of edgenode, {path} is source ruleEndpoint's sourceResource.  
+- URL: **http://{rest_endpoint}/{node_name}/{namespace}/{path}**, {rest_endpoint} is router's endpoint, {node_name} is name of edgenode, {namespace} is namespace of rule. {path} is source ruleEndpoint's sourceResource.
 - Body: {user_message}, {user_message} is user's message
 
 finally, kubeedge's servicebus will call api on edgen node.
@@ -406,7 +406,7 @@ finally, kubeedge's servicebus will call api on edgen node.
 
 For example:
 - Method: POST
-- URL: http://{rest_endpoint}/{node_name}/a
+- URL: http://{rest_endpoint}/{node_name}/default/a
 - Body： {"message":"123"}
 
 finnaly, kubeedge's servicebus calls api on edge node. For example:

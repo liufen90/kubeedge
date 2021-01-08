@@ -106,6 +106,9 @@ func (eb *eventbus) pubCloudMsgToEdge() {
 		case "subscribe":
 			eb.subscribe(resource)
 			klog.Infof("Edge-hub-cli subscribe topic to %s", resource)
+		case "unsubscribe":
+			eb.unsubscribe(resource)
+			klog.Infof("Edge-hub-cli unsubscribe topic to %s", resource)
 		case "message":
 			body, ok := accessInfo.GetContent().(map[string]interface{})
 			if !ok {
@@ -155,7 +158,7 @@ func (eb *eventbus) publish(topic string, payload []byte) {
 func (eb *eventbus) subscribe(topic string) {
 	if eventconfig.Config.MqttMode >= v1alpha1.MqttModeBoth {
 		// subscribe topic to external mqtt broker.
-		token := mqttBus.MQTTHub.SubCli.Subscribe(topic, 1, mqttBus.OnSubMessageReceived)
+		token := mqttBus.MQTTHub.SubCli.Subscribe(topic, 1, mqttBus.OnSubUserMessageReceived)
 		if rs, err := util.CheckClientToken(token); !rs {
 			klog.Errorf("Edge-hub-cli subscribe topic: %s, %v", topic, err)
 		}

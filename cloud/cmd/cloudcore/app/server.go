@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/kubeedge/kubeedge/cloud/pkg/router"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -103,4 +104,5 @@ func registerModules(c *v1alpha1.CloudCoreConfig) {
 	devicecontroller.Register(c.Modules.DeviceController, c.KubeAPIConfig)
 	synccontroller.Register(c.Modules.SyncController, c.KubeAPIConfig)
 	cloudstream.Register(c.Modules.CloudStream)
+	router.Register(c.Modules.Router)
 }

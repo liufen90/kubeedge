@@ -5,9 +5,9 @@ metadata:
   labels:
     description: test
 spec:
-  source: "rest"
+  source: "my-rest"
   sourceResource: {"path":"/a"}
-  target: "servicebus"
+  target: "my-servicebus"
   targetResource: {"path":"/b"}
 status:
   successMessages: 0

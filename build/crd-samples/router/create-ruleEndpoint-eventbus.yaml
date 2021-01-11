@@ -1,7 +1,7 @@
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: eventbus
+  name: my-eventbus
   labels:
     description: test
 spec:

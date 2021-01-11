@@ -1,9 +1,0 @@
-apiVersion: rules.kubeedge.io/v1
-kind: RuleEndpoint
-metadata:
-  name: my-ruleendpoint
-  labels:
-    description: test
-spec:
-  ruleEndpointType: "api"
-  properties: {}

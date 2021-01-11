@@ -17,7 +17,7 @@ spec:
               properties:
                 source:
                   description: 'source is a string value representing where the messages come from. Its
-                    value is the same with rule-endpoint name. For example, rest or eventbus.'
+                    value is the same with rule-endpoint name. For example, my-rest or my-eventbus.'
                   type: string
                 sourceResource:
                   description: 'sourceResource is a map representing the resource info of source. For rest
@@ -28,10 +28,10 @@ spec:
                     type: string
                 target:
                   description: 'target is a string value representing where the messages go to. its value is
-                     the same with rule-endpoint name. For example, eventbus or api or servicebus.'
+                     the same with rule-endpoint name. For example, my-eventbus or my-rest or my-servicebus.'
                   type: string
                 targetResource:
-                  description: 'targetResource is a map representing the resource info of target. For api
+                  description: 'targetResource is a map representing the resource info of target. For rest
                     rule-endpoint type its value is {"resource":"http://a.com"}. For eventbus rule-endpoint
                     type its value is {"topic":"/xxxx"}. For servicebus rule-endpoint type its value is {"path":"/request_path"}.'
                   type: object

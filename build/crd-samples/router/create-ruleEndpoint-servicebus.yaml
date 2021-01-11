@@ -1,7 +1,7 @@
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: my-ruleendpoint-servicebus
+  name: my-servicebus
   labels:
     description: test
 spec:

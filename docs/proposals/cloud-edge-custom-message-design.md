@@ -49,19 +49,17 @@ The proposal is to introduce a solution for users to deliver their custom messag
 <img src="../images/proposals/router.PNG">
 
 ### RuleEndpoint and Rule definition
-* A ruleEndpoint defines where messages come from, or where messages go to. It contains 4 types: rest, eventbus, api, servicebus.
-    1. **rest**: a rest endpoint in the cloud. It is a source ruleEndpoint to send rest requests to the edge. 
+* A ruleEndpoint defines where messages come from, or where messages go to. It contains 3 types: rest, eventbus, servicebus.
+    1. **rest**: a rest endpoint in the cloud. It is a source ruleEndpoint to send rest requests to the edge. Or a target ruleEndpoint to receive message from edge.
 
     2. **eventbus**: It is a source ruleEndpoint to send data to the cloud, or a target ruleEndpoint to receive messages from the cloud. 
 
-    3. **api**:  a rest api in cloud. It is a target ruleEndpoint to receive messages delivered from edge.
-
-    4. **servicebus**:  a rest api on edge node. It is a target ruleEndpoint to receive messages delivered from cloud.
+    3. **servicebus**:  a rest api on edge node. It is a target ruleEndpoint to receive messages delivered from cloud.
 
 * Rule defines how messages were delivered from source ruleendpoint to target ruleendpoint. It contained 3 rule types.
 
    1. rest->eventbus: users' app calls rest api in cloud to send messages, finally  messages were sent to mqttbroker in edge.
-   2. eventbus->api: users publish messages to mqttbroker in edge, finally messages were sent to api in cloud.
+   2. eventbus->rest: users publish messages to mqttbroker in edge, finally messages were sent to rest api in cloud.
    3. rest->servicebus: users' app calls rest api in cloud to send messages, finally  messages were sent to user's app in edge.
 
 ### RuleEndpoint and Rule CRD design
@@ -85,7 +83,7 @@ spec:
               type: object
               properties:
                 ruleEndpointType:
-                  description: 'ruleEndpointType is a string value representing rule-endpoint type. its value is one of rest/eventbus/api/servicebus.'
+                  description: 'ruleEndpointType is a string value representing rule-endpoint type. its value is one of rest/eventbus/servicebus.'
                   type: string
                 properties:
                   description: 'properties is not required except for servicebus rule-endpoint type. It is a map value representing rule-endpoint properties.
@@ -126,7 +124,7 @@ spec:
               properties:
                 source:
                   description: 'source is a string value representing where the messages come from. Its
-                    value is the same with rule-endpoint name. For example, rest or eventbus.'
+                    value is the same with rule-endpoint name. For example, my-rest or my-eventbus.'
                   type: string
                 sourceResource:
                   description: 'sourceResource is a map representing the resource info of source. For rest
@@ -137,10 +135,10 @@ spec:
                     type: string
                 target:
                   description: 'target is a string value representing where the messages go to. its value is
-                     the same with rule-endpoint name. For example, eventbus or api or servicebus.'
+                     the same with rule-endpoint name. For example, my-eventbus or my-rest or my-servicebus.'
                   type: string
                 targetResource:
-                  description: 'targetResource is a map representing the resource info of target. For api
+                  description: 'targetResource is a map representing the resource info of target. For rest
                     rule-endpoint type its value is {"resource":"http://a.com"}. For eventbus rule-endpoint
                     type its value is {"topic":"/xxxx"}. For servicebus rule-endpoint type its value is {"path":"/request_path"}.'
                   type: object
@@ -182,7 +180,7 @@ spec:
 
 1.1 create rest and eventbus type ruleEndpoint if they don't exist. Exec command:
 
-	`kubetctl create -f create-ruleEndpoint-rest.yaml;kubetctl create -f create-ruleEndpoint-eventbus.yaml`
+	`kubectl create -f create-ruleEndpoint-rest.yaml;kubectl create -f create-ruleEndpoint-eventbus.yaml`
 
 
 create-ruleEndpoint-rest.yaml's contents are as follows:
@@ -190,7 +188,7 @@ create-ruleEndpoint-rest.yaml's contents are as follows:
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: rest
+  name: my-rest
   labels:
     description: test
 spec:
@@ -203,7 +201,7 @@ create-ruleEndpoint-eventbus.yaml's contents are as follows:
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: eventbus
+  name: my-eventbus
   labels:
     description: test
 spec:
@@ -214,7 +212,7 @@ spec:
 
 1.2 create rule. Exec command:
 
-`kubetctl create -f create-rule-rest-eventbus.yaml`
+`kubectl create -f create-rule-rest-eventbus.yaml`
 
 create-rule-rest-eventbus.yaml's contents are as follows:
 
@@ -226,10 +224,10 @@ metadata:
   labels:
     description: test
 spec:
-  source: "rest"
+  source: "my-rest"
   sourceResource: {"path":"/a"}
-  target: "eventbus"
-  targetResource: {"topic":"/x"}
+  target: "my-eventbus"
+  targetResource: {"topic":"test"}
 status:
   successMessages: 0
   failMessages: 0
@@ -251,30 +249,30 @@ For example:
 
 1.4 User's app subscribes custom topics from mqtt-broker in edge to receive messages from the cloud. 
 
-- Topic: {user_custom_topic}, {user_custom_topic} is target ruleEndpoint's targetResource.
+- Topic: {topic}, {topic} is target ruleEndpoint's targetResource.
 - Message:  {user_message}
 
 For example:
-- subscribe Topic: '/x', exec command with mosquitto: `mosquitto_sub -t '/x' -d`
+- subscribe Topic: 'test', exec command with mosquitto: `mosquitto_sub -t 'test' -d`
 - Get Message: {"message":"123"}
 
-2. edge to cloud: **eventbus->api**:
+2. edge to cloud: **eventbus->rest**:
 
-2.1 create api type and eventbus type ruleEndpoint if they don't exist. Exec command:
+2.1 create rest type and eventbus type ruleEndpoint if they don't exist. Exec command:
 
-	`kubetctl create -f create-ruleEndpoint-api.yaml;kubetctl create -f create-ruleEndpoint-eventbus.yaml;`
+	`kubectl create -f create-ruleEndpoint-rest.yaml;kubectl create -f create-ruleEndpoint-eventbus.yaml;`
 
 
-create-ruleEndpoint-api.yaml's contents are as follows:
+create-ruleEndpoint-rest.yaml's contents are as follows:
 ```
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: my-ruleendpoint
+  name: my-rest
   labels:
     description: test
 spec:
-  ruleEndpointType: "api"
+  ruleEndpointType: "rest"
   properties: {}
 ```
 
@@ -283,7 +281,7 @@ create-ruleEndpoint-eventbus.yaml's contents are as follows:
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: eventbus
+  name: my-eventbus
   labels:
     description: test
 spec:
@@ -294,21 +292,21 @@ spec:
 
 2.2 create rule. Exec command:
 
-`kubetctl create -f create-rule-eventbus-api.yaml`
+`kubectl create -f create-rule-eventbus-rest.yaml`
 
-create-rule-eventbus-api.yaml's contents are as follows:
+create-rule-eventbus-rest.yaml's contents are as follows:
 
 ```
 apiVersion: rules.kubeedge.io/v1
 kind: Rule
 metadata:
-  name: my-rule-eventbus-api
+  name: my-rule-eventbus-rest
   labels:
     description: test
 spec:
-  source: "eventbus"
-  sourceResource: {"topic":"/x","node_name":"xxx"}
-  target: "api"
+  source: "my-eventbus"
+  sourceResource: {"topic": "test","node_name": "xxx"}
+  target: "my-rest"
   targetResource: {"resource":"http://a.com"}
 status:
   successMessages: 0
@@ -317,13 +315,13 @@ status:
 ```
 
 2.3 User's app in edge publishes messages with custom topic to MQTT broker on edge node. 
-- Topic: {namespace}/{custom_topic}
+- Topic: {namespace}/{topic}
 - Message:  {user_api_body}
 
 for example:
 - publish data with mosquitto, exec command:
 
- `mosquitto_pub -t 'default//x' -d -m '{"edgemsg":"msgtocloud"}'`
+ `mosquitto_pub -t 'default/test' -d -m '{"edgemsg":"msgtocloud"}'`
 
 2.4 Kubeedge delivers messages to user api address in cloud. 
 
@@ -337,7 +335,7 @@ For example: user's app in cloud gets the data {"edgemsg":"msgtocloud"}
 
 3.1 create rest and servicebus type ruleEndpoint if they don't exist. Exec command:
 
-	`kubetctl create -f create-ruleEndpoint-rest.yaml;kubetctl create -f create-ruleEndpoint-servicebus.yaml;`
+	`kubectl create -f create-ruleEndpoint-rest.yaml;kubectl create -f create-ruleEndpoint-servicebus.yaml;`
 
 
 create-ruleEndpoint-rest.yaml's contents are as follows:
@@ -345,7 +343,7 @@ create-ruleEndpoint-rest.yaml's contents are as follows:
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: rest
+  name: my-rest
   labels:
     description: test
 spec:
@@ -358,7 +356,7 @@ create-ruleEndpoint-servicebus.yaml's contents are as follows:
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: my-ruleendpoint-servicebus
+  name: my-servicebus
   labels:
     description: test
 spec:
@@ -369,7 +367,7 @@ spec:
 
 3.2 create rule. Exec command:
 
-`kubetctl create -f create-rule-rest-servicebus.yaml`
+`kubectl create -f create-rule-rest-servicebus.yaml`
 
 create-rule-rest-servicebus.yaml's contents are as follows:
 
@@ -381,9 +379,9 @@ metadata:
   labels:
     description: test
 spec:
-  source: "rest"
+  source: "my-rest"
   sourceResource: {"path":"/a"}
-  target: "servicebus"
+  target: "my-servicebus"
   targetResource: {"path":"/b"}
 status:
   successMessages: 0

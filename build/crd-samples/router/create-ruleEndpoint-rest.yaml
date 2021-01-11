@@ -1,7 +1,7 @@
 apiVersion: rules.kubeedge.io/v1
 kind: RuleEndpoint
 metadata:
-  name: rest
+  name: my-rest
   labels:
     description: test
 spec:

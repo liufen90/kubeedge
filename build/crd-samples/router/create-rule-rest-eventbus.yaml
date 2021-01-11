@@ -5,10 +5,10 @@ metadata:
   labels:
     description: test
 spec:
-  source: "rest"
+  source: "my-rest"
   sourceResource: {"path":"/a"}
-  target: "eventbus"
-  targetResource: {"topic":"/x"}
+  target: "my-eventbus"
+  targetResource: {"topic":"test"}
 status:
   successMessages: 0
   failMessages: 0

@@ -120,10 +120,10 @@ func (eh *EdgeHub) routeToEdge() {
 			return
 		}
 
-		klog.V(4).Infof("received msg from cloud-hub:%+v", message)
+		klog.Infof("received msg from cloud-hub:%+v", message)
 		err = eh.dispatch(message)
 		if err != nil {
-			klog.Errorf("failed to dispatch message, discard: %v", err)
+			klog.Errorf("failed to dispatch message, discard: %v, msg:%+v", err, message)
 		}
 	}
 }
@@ -136,7 +136,7 @@ func (eh *EdgeHub) sendToCloud(message model.Message) error {
 		klog.Errorf("failed to send message: %v", err)
 		return fmt.Errorf("failed to send message, error: %v", err)
 	}
-
+	klog.Infof("########################in eventhub ,sendToCloud success. message: %v", message)
 	syncKeep := func(message model.Message) {
 		tempChannel := eh.addKeepChannel(message.GetID())
 		sendTimer := time.NewTimer(time.Duration(config.Config.Heartbeat) * time.Second)
@@ -168,7 +168,7 @@ func (eh *EdgeHub) routeToCloud() {
 		}
 		message, err := beehiveContext.Receive(ModuleNameEdgeHub)
 		if err != nil {
-			klog.Errorf("failed to receive message from edge: %v", err)
+			klog.Errorf("failed to receive message from edge: %v, message:%v", err, message)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -176,7 +176,7 @@ func (eh *EdgeHub) routeToCloud() {
 		// post message to cloud hub
 		err = eh.sendToCloud(message)
 		if err != nil {
-			klog.Errorf("failed to send message to cloud: %v", err)
+			klog.Errorf("failed to send message to cloud: %v,  message:%v", err, message)
 			eh.reconnectChan <- struct{}{}
 			return
 		}

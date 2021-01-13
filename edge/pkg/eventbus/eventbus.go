@@ -100,6 +100,7 @@ func (eb *eventbus) pubCloudMsgToEdge() {
 			klog.Errorf("Fail to get a message from channel: %v", err)
 			continue
 		}
+		klog.Errorf("##################################################in eventbus, receive msg:%+v", accessInfo)
 		operation := accessInfo.GetOperation()
 		resource := accessInfo.GetResource()
 		switch operation {
@@ -110,6 +111,7 @@ func (eb *eventbus) pubCloudMsgToEdge() {
 			eb.unsubscribe(resource)
 			klog.Infof("Edge-hub-cli unsubscribe topic to %s", resource)
 		case "message":
+			klog.Infof("Edge-hub-cli message msg:%+v", accessInfo)
 			body, ok := accessInfo.GetContent().(map[string]interface{})
 			if !ok {
 				klog.Errorf("Message is not map type")
@@ -129,6 +131,7 @@ func (eb *eventbus) pubCloudMsgToEdge() {
 				payload = []byte(content)
 			}
 			eb.publish(topic, payload)
+			klog.Infof("Edge-hub-cli publish msg:%+v", accessInfo)
 		case "get_result":
 			if resource != "auth_info" {
 				klog.Info("Skip none auth_info get_result message")
@@ -137,6 +140,7 @@ func (eb *eventbus) pubCloudMsgToEdge() {
 			topic := fmt.Sprintf("$hw/events/node/%s/authInfo/get/result", eventconfig.Config.NodeName)
 			payload, _ := json.Marshal(accessInfo.GetContent())
 			eb.publish(topic, payload)
+			klog.Infof("Edge-hub-cli get_result msg:%+v", accessInfo)
 		default:
 			klog.Warningf("Action not found")
 		}

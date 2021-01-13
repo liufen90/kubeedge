@@ -53,13 +53,13 @@ func (mh *MessageHandler) getHandler(source string, resource string) (Handle, er
 func Process(module string) {
 	for {
 		if msg, err := beehiveContext.Receive(module); err == nil {
-			klog.Infof("get a message, header:%+v router:%+v", msg.Header, msg.Router)
+			klog.Infof("##############get a message, header:%+v router:%+v, msg:%+v", msg.Header, msg.Router, msg)
 			err = MessageHandlerInstance.HandleMessage(&msg)
 			if err != nil {
-				klog.Errorf("Process msg error: %s.", err.Error())
+				klog.Errorf("Process msg error: %s. msg %v", err.Error(), msg)
 			}
 		} else {
-			klog.Errorf("get a message, header:%+v router:%+v, err: %v", msg.Header, msg.Router, err)
+			klog.Errorf("###############################get a message, header:%+v router:%+v, msg:%v, err: %v", msg.Header, msg.Router, msg, err)
 		}
 	}
 }

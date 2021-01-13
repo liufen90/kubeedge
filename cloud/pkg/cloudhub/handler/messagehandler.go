@@ -364,7 +364,7 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 	nodeListQueue := mh.MessageQueue.GetNodeListQueue(info.NodeID)
 	nodeListStore := mh.MessageQueue.GetNodeListStore(info.NodeID)
 	nodeQueue := mh.MessageQueue.GetNodeQueue(info.NodeID)
-
+	klog.Errorf("ListMessageWriteLoop for node %s ", info.NodeID)
 	for {
 		key, quit := nodeListQueue.Get()
 		if quit {
@@ -378,7 +378,7 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 			continue
 		}
 		msg := obj.(*beehiveModel.Message)
-
+		klog.Infof("ListMessageWriteLoop, event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 		if model.IsNodeStopped(msg) {
 			klog.Warningf("node %s is deleted, data for node will be cleaned up", info.NodeID)
 			nodeQueue.ShutDown()
@@ -390,17 +390,20 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 			klog.Infof("skip only to cloud event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 			continue
 		}
-		klog.V(4).Infof("event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
+		klog.Infof("ListMessageWriteLoop event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 
 		trimMessage(msg)
 
 		conn, ok := mh.nodeConns.Load(info.NodeID)
 		if !ok {
+			klog.Infof("ListMessageWriteLoop, node conns not found for node %s", info.NodeID)
 			continue
 		}
 
 		if err := mh.send(conn.(hubio.CloudHubIO), info, msg); err != nil {
-			klog.Errorf("failed to send to cloudhub, err: %v", err)
+			klog.Errorf("failed to send to cloudhub, node %s err: %v", info.NodeID, err)
+		} else {
+			klog.Infof("ListMessageWriteLoop event for node %s successful, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 		}
 
 		// delete successfully sent events from the queue/store
@@ -432,13 +435,13 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 			continue
 		}
 		msg := obj.(*beehiveModel.Message)
-
+		klog.Infof("MessageWriteLoop,  for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 		if !model.IsToEdge(msg) {
 			klog.Infof("skip only to cloud event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 			nodeQueue.Done(key)
 			continue
 		}
-		klog.V(4).Infof("event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
+		klog.Infof("MessageWriteLoop event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 
 		copyMsg := deepcopy(msg)
 		trimMessage(copyMsg)
@@ -455,7 +458,10 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 					info.NodeID, dumpMessageMetadata(copyMsg), err.Error())
 				nodeQueue.AddRateLimited(key.(string))
 				time.Sleep(time.Second * 2)
+			} else {
+				klog.Infof("MessageWriteLoop event to send for node %s successful, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 			}
+
 			break
 		}
 

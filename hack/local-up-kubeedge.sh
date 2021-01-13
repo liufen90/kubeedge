@@ -127,7 +127,7 @@ function start_edgecore {
   sed -i -e "s|token: .*|token: ${token}|g" \
       -e "s|hostnameOverride: .*|hostnameOverride: edge-node|g" \
       -e "s|/etc/|/tmp/etc/|g" \
-      -e "s|mqttMode: .*|mqttMode: 0|g" ${EDGE_CONFIGFILE}
+      -e "s|mqttMode: .*|mqttMode: 1|g" ${EDGE_CONFIGFILE}
 
   EDGECORE_LOG=${LOG_DIR}/edgecore.log
 

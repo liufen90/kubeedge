@@ -24,6 +24,7 @@ const (
 	ResourceTypeNodeStatus   = "nodestatus"
 	ResourceTypeRule         = "rule"
 	ResourceTypeRuleEndpoint = "ruleendpoint"
+	ResourceTypeRuleStatus   = "rulestatus"
 )
 
 // Message struct

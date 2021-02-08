@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"github.com/kubeedge/kubeedge/cloud/pkg/router/rule"
 	"sort"
 	"time"
 
@@ -41,6 +42,8 @@ import (
 
 	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/beehive/pkg/core/model"
+	rulesv1 "github.com/kubeedge/kubeedge/cloud/pkg/apis/rules/v1"
+	crdClientset "github.com/kubeedge/kubeedge/cloud/pkg/client/clientset/versioned"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/client"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/config"
@@ -49,6 +52,10 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/types"
 	common "github.com/kubeedge/kubeedge/common/constants"
 	edgeapi "github.com/kubeedge/kubeedge/common/types"
+)
+
+const (
+	MergePatchType = "application/merge-patch+json"
 )
 
 // SortedContainerStatuses define A type to help sort container statuses based on container names.
@@ -79,6 +86,7 @@ func SortInitContainerStatuses(p *v1.Pod, statuses []v1.ContainerStatus) {
 
 // UpstreamController subscribe messages from edge and sync to k8s api server
 type UpstreamController struct {
+	crdClient    crdClientset.Interface
 	kubeClient   kubernetes.Interface
 	messageLayer messagelayer.MessageLayer
 
@@ -95,6 +103,7 @@ type UpstreamController struct {
 	queryNodeChan             chan model.Message
 	updateNodeChan            chan model.Message
 	podDeleteChan             chan model.Message
+	ruleStatusChan            chan model.Message
 
 	// lister
 	podLister       corelisters.PodLister
@@ -121,6 +130,7 @@ func (uc *UpstreamController) Start() error {
 	uc.queryNodeChan = make(chan model.Message, config.Config.Buffer.QueryNode)
 	uc.updateNodeChan = make(chan model.Message, config.Config.Buffer.UpdateNode)
 	uc.podDeleteChan = make(chan model.Message, config.Config.Buffer.DeletePod)
+	uc.ruleStatusChan = make(chan model.Message, config.Config.Buffer.UpdateRuleStatus)
 
 	go uc.dispatchMessage()
 
@@ -159,6 +169,9 @@ func (uc *UpstreamController) Start() error {
 	}
 	for i := 0; i < int(config.Config.Load.DeletePodWorkers); i++ {
 		go uc.deletePod()
+	}
+	for i := 0; i < int(config.Config.Load.UpdateRuleStatusWorkers); i++ {
+		go uc.updateRuleStatus()
 	}
 	return nil
 }
@@ -223,6 +236,8 @@ func (uc *UpstreamController) dispatchMessage() {
 			} else {
 				klog.Errorf("message: %s, operation type: %s unsupported", msg.GetID(), msg.GetOperation())
 			}
+		case model.ResourceTypeRuleStatus:
+			uc.ruleStatusChan <- msg
 		default:
 			klog.Errorf("message: %s, resource type: %s unsupported", msg.GetID(), resourceType)
 		}
@@ -974,6 +989,7 @@ func (uc *UpstreamController) nodeMsgResponse(nodeName, namespace, content strin
 // NewUpstreamController create UpstreamController from config
 func NewUpstreamController(factory k8sinformer.SharedInformerFactory) (*UpstreamController, error) {
 	uc := &UpstreamController{
+		crdClient:    client.GetKubeEdgeCRDClient(),
 		kubeClient:   client.GetKubeClient(),
 		messageLayer: messagelayer.NewContextMessageLayer(),
 	}
@@ -984,4 +1000,93 @@ func NewUpstreamController(factory k8sinformer.SharedInformerFactory) (*Upstream
 	uc.configMapLister = factory.Core().V1().ConfigMaps().Lister()
 	uc.secretLister = factory.Core().V1().Secrets().Lister()
 	return uc, nil
+}
+
+func (uc *UpstreamController) updateRuleStatus() {
+	for {
+		select {
+		case <-beehiveContext.Done():
+			klog.Warning("stop updateRuleStatus")
+			return
+		case msg := <-uc.ruleStatusChan:
+			klog.V(5).Infof("message: %s, operation is: %s, and resource is %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
+			var data []byte
+			switch msg.Content.(type) {
+			case []byte:
+				data = msg.GetContent().([]byte)
+			default:
+				var err error
+				data, err = json.Marshal(msg.GetContent())
+				if err != nil {
+					klog.Warningf("message: %s process failure, marshal message content with error: %s", msg.GetID(), err)
+					continue
+				}
+			}
+
+			namespace, err := messagelayer.GetNamespace(msg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, get namespace failed with error: %s", msg.GetID(), err)
+				continue
+			}
+			name, err := messagelayer.GetResourceName(msg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, get resource name failed with error: %s", msg.GetID(), err)
+				continue
+			}
+
+			ruleExecResult := &rule.ExecResult{}
+			err = json.Unmarshal(data, ruleExecResult)
+			if err != nil {
+				klog.Warningf("message: %s process failure, unmarshal marshaled message content with error: %s", msg.GetID(), err)
+				continue
+			}
+			res, err := uc.crdClient.RulesV1().RESTClient().Get().Namespace(namespace).Resource("rules").Name(name).DoRaw(context.Background())
+			if err != nil {
+				klog.Warningf("message: %s process failure, get rule with error: %s, namespaces: %s name: %s", msg.GetID(), err, namespace, name)
+				continue
+			}
+			ruleInfo := &rulesv1.Rule{}
+			err = json.Unmarshal(res, ruleInfo)
+			if err != nil {
+				klog.Warningf("message: %s process failure, unmarshal marshaled message content with error: %s", msg.GetID(), err)
+				klog.Warningf("debug: get rule: %s", res)
+				continue
+			}
+			ruleStatus := ruleInfo.Status
+		    var newSuccessMessages int64
+			var newFailedMessages int64
+			var newErrors []string
+			if ruleExecResult.Status == "SUCCESS" {
+				newSuccessMessages = ruleStatus.SuccessMessages + 1
+				newFailedMessages = ruleStatus.FailMessages
+				newErrors = ruleStatus.Errors
+			} else {
+				newSuccessMessages = ruleStatus.SuccessMessages
+				newFailedMessages = ruleStatus.FailMessages + 1
+				errSlice := make([]string, 0)
+				newErrors = append(errSlice, ruleExecResult.Error.Detail)
+			}
+
+
+			newRuleStatus := rulesv1.RuleStatus{SuccessMessages:newSuccessMessages, FailMessages:newFailedMessages, Errors:newErrors}
+			newStatus := &status{Status:newRuleStatus}
+			body, err := json.Marshal(newStatus)
+			if err != nil {
+				klog.Warningf("message: %s process failure, marshal marshaled message content with error: %s", msg.GetID(), err)
+				continue
+			}
+
+			err = uc.crdClient.RulesV1().RESTClient().Patch(MergePatchType).Namespace(namespace).Resource("rules").Name(name).Body(body).Do(context.Background()).Error()
+			if err != nil {
+				klog.Warningf("message: %s process failure, update ruleStatus failed with error: %s, namespace: %s, name: %s", msg.GetID(), err, namespace, name)
+				continue
+			}
+
+			klog.V(4).Infof("message: %s, %+v, process successfully", msg.GetID(), msg)
+		}
+	}
+}
+
+type status struct {
+	Status rulesv1.RuleStatus `json:"status,omitempty"`
 }

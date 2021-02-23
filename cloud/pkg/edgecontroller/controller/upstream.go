@@ -265,7 +265,9 @@ func (uc *UpstreamController) updateRuleStatus(){
 			content, ok := msg.Content.(rule2.ExecResult)
 			if !ok {
 				klog.Warningf("Content Error")
-			}
+			} else{
+			   klog.Infof("QAQ receive successfully!")
+		    }
 			if content.Status == "SUCCESS"{
 				//让这个rule的成功消息数+1
 				rule.Status.SuccessMessages += 1
@@ -287,7 +289,9 @@ func (uc *UpstreamController) updateRuleStatus(){
 			_, err = uc.crdClient.RulesV1().Rules(namespace).Patch(context.Background(), ruleID, controller.MergePatchType, data, metaV1.PatchOptions{})
 			if err != nil{
 				klog.Warningf("Patch status fail")
-			}
+			} else{
+			  klog.Infof("QAQ " + "Patch status successfully!")
+		    }
          }
 	}
 

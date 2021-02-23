@@ -28,6 +28,10 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	rulesv1 "github.com/kubeedge/kubeedge/cloud/pkg/apis/rules/v1"
+	crdClientset "github.com/kubeedge/kubeedge/cloud/pkg/client/clientset/versioned"
+	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/controller"
+	rule2 "github.com/kubeedge/kubeedge/cloud/pkg/router/rule"
 	"sort"
 	"time"
 
@@ -53,6 +57,10 @@ import (
 
 // SortedContainerStatuses define A type to help sort container statuses based on container names.
 type SortedContainerStatuses []v1.ContainerStatus
+
+type RuleStatus struct {
+	Status rulesv1.RuleStatus `json:"status"`
+}
 
 func (s SortedContainerStatuses) Len() int      { return len(s) }
 func (s SortedContainerStatuses) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
@@ -81,6 +89,7 @@ func SortInitContainerStatuses(p *v1.Pod, statuses []v1.ContainerStatus) {
 type UpstreamController struct {
 	kubeClient   kubernetes.Interface
 	messageLayer messagelayer.MessageLayer
+	crdClient    crdClientset.Clientset
 
 	// message channel
 	nodeStatusChan            chan model.Message
@@ -95,6 +104,7 @@ type UpstreamController struct {
 	queryNodeChan             chan model.Message
 	updateNodeChan            chan model.Message
 	podDeleteChan             chan model.Message
+	ruleStatusChan            chan model.Message
 
 	// lister
 	podLister       corelisters.PodLister
@@ -121,6 +131,8 @@ func (uc *UpstreamController) Start() error {
 	uc.queryNodeChan = make(chan model.Message, config.Config.Buffer.QueryNode)
 	uc.updateNodeChan = make(chan model.Message, config.Config.Buffer.UpdateNode)
 	uc.podDeleteChan = make(chan model.Message, config.Config.Buffer.DeletePod)
+	uc.ruleStatusChan = make(chan model.Message,config.Config.Buffer.UpdateNodeStatus)
+
 
 	go uc.dispatchMessage()
 
@@ -172,6 +184,7 @@ func (uc *UpstreamController) dispatchMessage() {
 		default:
 		}
 		msg, err := uc.messageLayer.Receive()
+		fmt.Println(msg.Content)
 		if err != nil {
 			klog.Warningf("receive message failed, %s", err)
 			continue
@@ -225,9 +238,61 @@ func (uc *UpstreamController) dispatchMessage() {
 			}
 		default:
 			klog.Errorf("message: %s, resource type: %s unsupported", msg.GetID(), resourceType)
+		case model.ResourceTypeRuleStatus:
+			uc.ruleStatusChan <- msg
 		}
+
 	}
 }
+func (uc *UpstreamController) updateRuleStatus(){
+	for{
+		select{
+		case <-beehiveContext.Done():
+			klog.Warning("stop updateRuleStatus")
+			return
+		case msg := <-uc.ruleStatusChan:
+			namespace, err := messagelayer.GetNamespace(msg)
+			ruleID,err := messagelayer.GetResourceName(msg)
+			if err != nil{
+				klog.Warningf("Get Resource Error")
+
+			}
+			rule,err := uc.crdClient.RulesV1().Rules(namespace).Get(context.Background(),ruleID, metaV1.GetOptions{})
+			if err != nil{
+				klog.Warningf("Get Rule Error")
+			}
+			//此处如何获取content中的status字段
+			content, ok := msg.Content.(rule2.ExecResult)
+			if !ok {
+				klog.Warningf("Content Error")
+			}
+			if content.Status == "SUCCESS"{
+				//让这个rule的成功消息数+1
+				rule.Status.SuccessMessages += 1
+			}
+			if content.Status == "FAIL"{
+				//让这个rule的失败消息数+1，并更新Error的情况
+				rule.Status.FailMessages += 1
+				errByte, _ := json.Marshal(content.Error)
+				errString :=string(errByte)
+				rule.Status.Errors = []string {errString}//此处只保存最新的失败信息
+
+
+			}
+			//此处调用patch没有参考devicecontroller里的upstream，因为发现rule本身有定义get patch等接口
+			//要注意body体是由status：statusType组成的映射
+			ruleStatus := &RuleStatus{Status:rule.Status}
+			body, _ := json.Marshal(ruleStatus)
+			var data []byte = []byte(body)
+			_, err = uc.crdClient.RulesV1().Rules(namespace).Patch(context.Background(), ruleID, controller.MergePatchType, data, metaV1.PatchOptions{})
+			if err != nil{
+				klog.Warningf("Patch status fail")
+			}
+         }
+	}
+
+}
+
 
 func (uc *UpstreamController) updatePodStatus() {
 	for {

@@ -475,7 +475,7 @@ func (dc *DownstreamController) syncRule() {
 			klog.V(4).Infof("Get rule events: rule object: %+v.", rule)
 			msg := model.NewMessage("")
 			msg.SetResourceVersion(rule.ResourceVersion)
-			resource, err := messagelayer.BuildResourceForRouter(model.ResourceTypeRule, rule.Name)
+			resource, err := messagelayer.BuildResourceForRouter(rule.Namespace,model.ResourceTypeRule, rule.Name)
 			if err != nil {
 				klog.Warningf("built message resource failed with error: %s", err)
 				continue
@@ -518,7 +518,7 @@ func (dc *DownstreamController) syncRuleEndpoint() {
 			klog.V(4).Infof("Get ruleEndpoint events: ruleEndpoint object: %+v.", ruleEndpoint)
 			msg := model.NewMessage("")
 			msg.SetResourceVersion(ruleEndpoint.ResourceVersion)
-			resource, err := messagelayer.BuildResourceForRouter(model.ResourceTypeRuleEndpoint, ruleEndpoint.Name)
+			resource, err := messagelayer.BuildResourceForRouter(ruleEndpoint.Namespace,model.ResourceTypeRuleEndpoint, ruleEndpoint.Name)
 			if err != nil {
 				klog.Warningf("built message resource failed with error: %s", err)
 				continue

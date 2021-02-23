@@ -1,9 +1,14 @@
 package rule
 
 import (
+	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
+	"github.com/kubeedge/beehive/pkg/core/model"
+	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
+	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
+	"k8s.io/klog/v2"
+	"github.com/kubeedge/kubeedge/cloud/pkg/router/constants"
 	"time"
 
-	"k8s.io/klog/v2"
 )
 
 type ExecResult struct {
@@ -26,78 +31,40 @@ func init() {
 	go do(StopChan)
 }
 
-func do(stop chan bool) {
+/*unc do(stop chan bool) {
 	ResultChannel = make(chan ExecResult, 1024)
-	ruleStatus := make(map[string][2]int)
-	errorMsgs := []ExecResult{}
-	timer := time.NewTimer(30 * time.Second)
-	defer timer.Stop()
+	r := <-ResultChannel
+	if r.Status == "SUCCESS" {
+		msg := model.NewMessage("")
+		resource := "node/nodename/" + r.ProjectID + "/rule/" + r.RuleID
+		msgv1 := msg.BuildRouter("router", "rule", resource, "update")
+		msgv1.Content = r
 
-	for {
-		select {
-		case r := <-ResultChannel:
-			stat, exist := ruleStatus[r.RuleID]
-			if !exist {
-				stat = [2]int{0, 0}
+		beehiveContext.Send("edgecontroller", *msgv1)
+	}
+}*/
+
+func do(stop chan bool){
+	ResultChannel = make(chan ExecResult, 1024)
+
+	for{
+		select{
+		case r:= <-ResultChannel:
+			msg := model.NewMessage("")
+			resource, err := messagelayer.BuildResourceForRouter( r.ProjectID, model.ResourceTypeRuleStatus, r.RuleID)//message构建时需要的常数都在model里定义过
+ 			if err != nil{
+ 				klog.Warningf("build message resource failed with error: %s", err)
+ 				continue
 			}
-
-			if r.Status == "SUCCESS" {
-				stat[0]++
-			} else if r.Status == "FAIL" {
-				stat[1]++
-				errorMsgs = append(errorMsgs, r)
+			msg.Content = r
+			msg.BuildRouter(modules.RouterModuleName, constants.GroupResource, resource, model.UpdateOperation )//modules里定义了
+			beehiveContext.Send(modules.EdgeControllerModuleName, *msg)
+			klog.V(4).Infof("send message successfully,operation: %s", msg.GetOperation(), msg.GetResource())
+        case _, ok := <-stop:
+        	if !ok{
+        		klog.Warningf("do stop channel is closed")
 			}
-			ruleStatus[r.RuleID] = stat
-			//Commit to DB if we have got enough error messages
-			if len(errorMsgs) >= 50 {
-				timer.Reset(30 * time.Second)
-				rs := ruleStatus
-				er := errorMsgs
-
-				go handleStatus(rs, er)
-
-				//cleanMap(ruleStatus)
-				ruleStatus = make(map[string][2]int)
-				errorMsgs = []ExecResult{}
-			}
-		case <-timer.C:
-			//Record to DB once time is up
-			timer.Reset(30 * time.Second)
-			rs := ruleStatus
-			er := errorMsgs
-
-			go handleStatus(rs, er)
-
-			//cleanMap(ruleStatus)
-			ruleStatus = make(map[string][2]int)
-			errorMsgs = []ExecResult{}
-		case _, ok := <-stop:
-			if !ok {
-				klog.Warningf("do stop channel is closed")
-			}
-			return
 		}
-	}
-}
-
-func handleStatus(ruleStatus map[string][2]int, msg []ExecResult) {
-	for k, v := range ruleStatus {
-		recordStatus(k, v[0], v[1])
-	}
-	recordErrorMsg(msg)
-}
-
-func recordStatus(rule string, succCount int, failCount int) {
-
-}
-
-func recordErrorMsg(results []ExecResult) {
-	//Check total error msg number for this rule
-
-}
-
-func cleanMap(m map[string][2]int) {
-	for k := range m {
-		delete(m, k)
+		return
 	}
 }

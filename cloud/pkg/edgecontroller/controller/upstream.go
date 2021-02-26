@@ -131,8 +131,7 @@ func (uc *UpstreamController) Start() error {
 	uc.queryNodeChan = make(chan model.Message, config.Config.Buffer.QueryNode)
 	uc.updateNodeChan = make(chan model.Message, config.Config.Buffer.UpdateNode)
 	uc.podDeleteChan = make(chan model.Message, config.Config.Buffer.DeletePod)
-	uc.ruleStatusChan = make(chan model.Message,config.Config.Buffer.UpdateNodeStatus)
-
+	uc.ruleStatusChan = make(chan model.Message, config.Config.Buffer.UpdateNodeStatus)
 
 	go uc.dispatchMessage()
 
@@ -171,6 +170,9 @@ func (uc *UpstreamController) Start() error {
 	}
 	for i := 0; i < int(config.Config.Load.DeletePodWorkers); i++ {
 		go uc.deletePod()
+	}
+	for i:= 0; i < int(config.Config.Load.UpdateRuleStatusWorkers); i++{
+		go uc.updateRuleStatus()
 	}
 	return nil
 }
@@ -244,59 +246,65 @@ func (uc *UpstreamController) dispatchMessage() {
 
 	}
 }
-func (uc *UpstreamController) updateRuleStatus(){
-	for{
-		select{
+func (uc *UpstreamController) updateRuleStatus() {
+	for {
+		select {
 		case <-beehiveContext.Done():
 			klog.Warning("stop updateRuleStatus")
 			return
 		case msg := <-uc.ruleStatusChan:
+			klog.V(5).Infof("message %s, operation is : %s , and resource is %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 			namespace, err := messagelayer.GetNamespace(msg)
-			ruleID,err := messagelayer.GetResourceName(msg)
-			if err != nil{
-				klog.Warningf("Get Resource Error")
+			if err != nil {
+				klog.Warningf("message: %s process failure, get namespace failed with error: %s", msg.GetID(), err)
 
 			}
-			rule,err := uc.crdClient.RulesV1().Rules(namespace).Get(context.Background(),ruleID, metaV1.GetOptions{})
-			if err != nil{
-				klog.Warningf("Get Rule Error")
+			ruleID, err := messagelayer.GetResourceName(msg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, get resource name failed with error: %s", msg.GetID(), err)
+
+			}
+			rule, err := uc.crdClient.RulesV1().Rules(namespace).Get(context.Background(), ruleID, metaV1.GetOptions{})
+			if err != nil {
+				klog.Warningf("message: %s process failure, get rule with error: %s, namespaces: %s name: %s", msg.GetID(), err, namespace, ruleID)
 			}
 			//此处如何获取content中的status字段
 			content, ok := msg.Content.(rule2.ExecResult)
 			if !ok {
 				klog.Warningf("Content Error")
-			} else{
-			   klog.Infof("QAQ receive successfully!")
-		    }
-			if content.Status == "SUCCESS"{
+			} else {
+				klog.Infof("QAQ receive successfully!")
+			}
+			if content.Status == "SUCCESS" {
 				//让这个rule的成功消息数+1
 				rule.Status.SuccessMessages += 1
 			}
-			if content.Status == "FAIL"{
+			if content.Status == "FAIL" {
 				//让这个rule的失败消息数+1，并更新Error的情况
 				rule.Status.FailMessages += 1
 				errByte, _ := json.Marshal(content.Error)
-				errString :=string(errByte)
-				rule.Status.Errors = []string {errString}//此处只保存最新的失败信息
-
+				errString := string(errByte)
+				rule.Status.Errors = []string{errString} //此处只保存最新的失败信息
 
 			}
 			//此处调用patch没有参考devicecontroller里的upstream，因为发现rule本身有定义get patch等接口
 			//要注意body体是由status：statusType组成的映射
-			ruleStatus := &RuleStatus{Status:rule.Status}
-			body, _ := json.Marshal(ruleStatus)
+			ruleStatus := &RuleStatus{Status: rule.Status}
+			body, err := json.Marshal(ruleStatus)
+			if err != nil {
+				klog.Warningf("message: %s process failure, content marshal err: %s", msg.GetID(), err)
+			}
 			var data []byte = []byte(body)
 			_, err = uc.crdClient.RulesV1().Rules(namespace).Patch(context.Background(), ruleID, controller.MergePatchType, data, metaV1.PatchOptions{})
-			if err != nil{
-				klog.Warningf("Patch status fail")
-			} else{
-			  klog.Infof("QAQ " + "Patch status successfully!")
-		    }
-         }
+			if err != nil {
+				klog.Warningf("message: %s process failure, update ruleStatus failed with error: %s, namespace: %s, name: %s", msg.GetID(), err, namespace, ruleID)
+			} else {
+				klog.Infof("QAQ " + "Patch status successfully!")
+			}
+		}
 	}
 
 }
-
 
 func (uc *UpstreamController) updatePodStatus() {
 	for {

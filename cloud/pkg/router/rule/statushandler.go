@@ -4,11 +4,10 @@ import (
 	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/beehive/pkg/core/model"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
-	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
-	"k8s.io/klog/v2"
 	"github.com/kubeedge/kubeedge/cloud/pkg/router/constants"
+	"github.com/kubeedge/kubeedge/cloud/pkg/router/messagelayer"
+	"k8s.io/klog/v2"
 	"time"
-
 )
 
 type ExecResult struct {
@@ -44,25 +43,25 @@ func init() {
 	}
 }*/
 
-func do(stop chan bool){
+func do(stop chan bool) {
 	ResultChannel = make(chan ExecResult, 1024)
 
-	for{
-		select{
-		case r:= <-ResultChannel:
+	for {
+		select {
+		case r := <-ResultChannel:
 			msg := model.NewMessage("")
-			resource, err := messagelayer.BuildResourceForRouter( r.ProjectID, model.ResourceTypeRuleStatus, r.RuleID)//message构建时需要的常数都在model里定义过
- 			if err != nil{
- 				klog.Warningf("build message resource failed with error: %s", err)
- 				continue
+			resource, err := messagelayer.BuildResourceForRouter(r.ProjectID, model.ResourceTypeRuleStatus, r.RuleID) //message构建时需要的常数都在model里定义过
+			if err != nil {
+				klog.Warningf("build message resource failed with error: %s", err)
+				continue
 			}
 			msg.Content = r
-			msg.BuildRouter(modules.RouterModuleName, constants.GroupResource, resource, model.UpdateOperation )//modules里定义了
+			msg.BuildRouter(modules.RouterModuleName, constants.GroupResource, resource, model.UpdateOperation) //modules里定义了
 			beehiveContext.Send(modules.EdgeControllerModuleName, *msg)
 			klog.V(4).Infof("send message successfully,operation: %s", msg.GetOperation(), msg.GetResource())
-        case _, ok := <-stop:
-        	if !ok{
-        		klog.Warningf("do stop channel is closed")
+		case _, ok := <-stop:
+			if !ok {
+				klog.Warningf("do stop channel is closed")
 			}
 		}
 		return

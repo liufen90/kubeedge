@@ -23,6 +23,7 @@ Changes done are
 package edged
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -45,6 +46,7 @@ import (
 	edgeapi "github.com/kubeedge/kubeedge/common/types"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/message"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/modules"
+	util2 "github.com/kubeedge/kubeedge/edge/pkg/common/util"
 	"github.com/kubeedge/kubeedge/edge/pkg/edged/apis"
 	"github.com/kubeedge/kubeedge/edge/pkg/edged/config"
 	"github.com/kubeedge/kubeedge/edge/pkg/edgehub"
@@ -414,6 +416,18 @@ func (e *edged) updateNodeStatus() error {
 	nodeStatus, err := e.getNodeStatusRequest(&initNode)
 	if err != nil {
 		klog.Errorf("Unable to construct api.NodeStatusRequest object for edge: %v", err)
+		return err
+	}
+
+	// save data in file
+	data, err := json.Marshal(nodeStatus)
+	if err != nil {
+		klog.Errorf("Marshal data error: %v", err)
+		return err
+	}
+	err = util2.SaveDataToFile(data, "nodestatus")
+	if err != nil {
+		klog.Errorf("SaveDataToFile error: %v", err)
 		return err
 	}
 

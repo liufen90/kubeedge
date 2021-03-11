@@ -22,9 +22,20 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io/ioutil"
+	"k8s.io/klog/v2"
 	"math/big"
 	"os"
+	"path"
+	"strings"
 	"time"
+)
+
+const (
+	outPutFilePath = "OUTPUT_FILE_PATH"
+	defaultPath    = "/root"
+	filePostFix    = ".json"
+	separation     = "/"
 )
 
 //GenerateTestCertificate generates fake certificates and stores them at the path specified.
@@ -92,4 +103,14 @@ func createPEMfile(path string, pemBlock pem.Block) error {
 	defer file.Close()
 	err = pem.Encode(file, &pemBlock)
 	return err
+}
+
+func SaveDataToFile(data []byte, dataType string) error {
+	outPutFilePath := os.Getenv(outPutFilePath)
+	if outPutFilePath == "" || !path.IsAbs(outPutFilePath) {
+		klog.Warningf("not set env OUTPUT_FILE_PATH or OUTPUT_FILE_PATH is not absolute path, use the default path /root")
+		outPutFilePath = defaultPath
+	}
+	filePath := strings.TrimSuffix(outPutFilePath, separation) + separation + dataType + filePostFix
+	return ioutil.WriteFile(filePath, data, 0666)
 }

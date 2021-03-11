@@ -17,6 +17,7 @@ import (
 	connect "github.com/kubeedge/kubeedge/edge/pkg/common/cloudconnection"
 	messagepkg "github.com/kubeedge/kubeedge/edge/pkg/common/message"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/modules"
+	util2 "github.com/kubeedge/kubeedge/edge/pkg/common/util"
 	metaManagerConfig "github.com/kubeedge/kubeedge/edge/pkg/metamanager/config"
 	"github.com/kubeedge/kubeedge/edge/pkg/metamanager/dao"
 	"github.com/kubeedge/kubeedge/edge/pkg/metamanager/metaserver/kubernetes/storage/sqlite/imitator"
@@ -314,6 +315,15 @@ func (m *metaManager) processUpdate(message model.Message) {
 		klog.Errorf("update meta failed, %s", msgDebugInfo(&message))
 		feedbackError(err, "Error to update meta to DB", message)
 		return
+	}
+
+	// save data in file
+	if resType == model.ResourceTypePodStatus {
+		err = util2.SaveDataToFile(content, "podstatus")
+		if err != nil {
+			klog.Errorf("SaveDataToFile error: %v", err)
+			return
+		}
 	}
 
 	msgSource := message.GetSource()
